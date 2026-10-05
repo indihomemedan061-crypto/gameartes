@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Math Challenge v1.1 — Gestur Tangan</title>
+    <title>AR Math Challenge v1.2 — Gestur Tangan</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
     <style>
@@ -371,7 +371,6 @@
             50% { transform: translateY(-10px) rotate(1deg); }
         }
 
-        /* Loading spinner */
         .spinner {
             width: 44px; height: 44px;
             border: 4px solid rgba(251, 191, 36, 0.25);
@@ -383,7 +382,6 @@
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* Leaderboard */
         .leaderboard {
             background: rgba(15, 23, 42, 0.6);
             border: 1px solid rgba(251, 191, 36, 0.35);
@@ -679,17 +677,50 @@
         const sfx = new SoundFX();
 
         // ============================================================
-        // TEXT TO SPEECH
+        // TEXT TO SPEECH — Khusus Bahasa Indonesia
+        // Kalau suara Indonesia tidak tersedia → TIDAK BUNYI sama sekali
+        // (tidak fallback ke suara Inggris)
         // ============================================================
         class TTS {
-            constructor() { this.enabled = 'speechSynthesis' in window; }
+            constructor() {
+                this.enabled = 'speechSynthesis' in window;
+                this.voice = null;
+                this.available = false;
+
+                if (this.enabled) {
+                    this._loadVoices();
+                    // Chrome load voices secara async
+                    window.speechSynthesis.onvoiceschanged = () => this._loadVoices();
+                }
+            }
+
+            _loadVoices() {
+                const voices = window.speechSynthesis.getVoices();
+                // Cari suara Indonesia (prioritas id-ID)
+                this.voice = voices.find(v => v.lang === 'id-ID')
+                          || voices.find(v => v.lang.toLowerCase().startsWith('id'))
+                          || voices.find(v => v.name.toLowerCase().includes('indonesia'))
+                          || null;
+
+                this.available = !!this.voice;
+
+                if (this.available) {
+                    console.log('🔊 TTS Indonesia siap:', this.voice.name);
+                } else {
+                    console.warn('⚠️ Suara Indonesia tidak tersedia. TTS dimatikan (tidak akan bunyi Inggris).');
+                }
+            }
 
             speak(text) {
                 if (!this.enabled) return;
+                // Kalau tidak ada suara Indonesia → skip total (tidak bunyi)
+                if (!this.available || !this.voice) return;
+
                 try {
                     window.speechSynthesis.cancel();
                     const u = new SpeechSynthesisUtterance(text);
                     u.lang = 'id-ID';
+                    u.voice = this.voice;
                     u.rate = 1.0;
                     u.pitch = 1.05;
                     window.speechSynthesis.speak(u);
@@ -765,7 +796,7 @@
         const TOTAL_QUESTIONS_PER_GAME = 5;
         const POINTS_PER_CORRECT = 20;
         const MAX_SCORE = TOTAL_QUESTIONS_PER_GAME * POINTS_PER_CORRECT;
-        const TIME_PER_QUESTION = 20; // detik
+        const TIME_PER_QUESTION = 20;
 
         function shuffleArray(arr) {
             const a = [...arr];
@@ -872,22 +903,19 @@
         let selectedTopic = 'Penjumlahan Dasar';
         let playerName = 'Siswa';
 
-        // Timer
         let timeLeft = TIME_PER_QUESTION;
         let timerInterval = null;
 
-        // Canvas objects
         let answerCards = [];
         let dropZone = { x: 0, y: 0, width: 220, height: 160, isHovered: false };
 
-        // Hand tracking
         let handLandmarks = null;
         let isHandDetected = false;
         let isPinching = false;
         let pinchPos = { x: 0, y: 0 };
         let grabbedCard = null;
         let isProcessingFrame = false;
-        let pinchThreshold = 50; // akan di-recalc di setupCanvasSize
+        let pinchThreshold = 50;
 
         // ============================================================
         // CANVAS SETUP
@@ -908,7 +936,6 @@
             dropZone.x = (W - dropZone.width) / 2;
             dropZone.y = (H - dropZone.height) / 2 - H * 0.03;
 
-            // Kalibrasi pinch threshold adaptif (5% lebar layar, min 35, max 60)
             pinchThreshold = Math.max(35, Math.min(60, W * 0.05));
 
             repositionCards();
@@ -1097,14 +1124,11 @@
             questionTextEl.textContent = q.question + " = ?";
             updateProgressText();
 
-            // Acak urutan opsi jawaban (anti-hafalan)
             const shuffledOptions = shuffleArray(q.options);
             answerCards = shuffledOptions.map((option, idx) => new Card(option, idx));
 
-            // TTS baca soal
             tts.speak(`Berapa ${q.question}?`);
 
-            // Mulai timer
             startTimer();
         }
 
@@ -1151,7 +1175,6 @@
             finalScoreEl.textContent = score;
             gameoverModal.classList.remove('hidden');
 
-            // Simpan ke leaderboard
             saveToLeaderboard(playerName, score, selectedTopic);
             renderLeaderboard('lb-list-end');
 
@@ -1169,7 +1192,6 @@
             }
             reportTextEl.textContent = report;
 
-            // Baca hasil
             tts.speak(`Permainan selesai. Skor kamu ${score} dari 100.`);
         }
 
@@ -1316,7 +1338,6 @@
                 handleGestureInteraction(wasPinching, isPinching);
 
             } else {
-                // Tangan hilang
                 if (isHandDetected && grabbedCard) {
                     showFeedback("Tangan hilang!", "warning");
                     releaseCard();
@@ -1334,7 +1355,6 @@
         function handleGestureInteraction(wasPinching, currentlyPinching) {
             if (isAnswerChecking) return;
 
-            // Mulai grab
             if (!wasPinching && currentlyPinching) {
                 for (let card of answerCards) {
                     if (card.containsPoint(pinchPos.x, pinchPos.y)) {
@@ -1346,7 +1366,6 @@
                 }
             }
 
-            // Update hover dropzone
             if (grabbedCard) {
                 const cardCenterX = grabbedCard.x + grabbedCard.width / 2;
                 const cardCenterY = grabbedCard.y + grabbedCard.height / 2;
@@ -1361,7 +1380,6 @@
                 dropZone.isHovered = false;
             }
 
-            // Lepas
             if (wasPinching && !currentlyPinching && grabbedCard) {
                 releaseCard();
             }
@@ -1457,7 +1475,6 @@
         startBtn.addEventListener('click', () => {
             sfx.init();
 
-            // Cek protokol
             if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
                 errorMessageEl.textContent = "Kamera hanya bisa diakses via HTTPS atau localhost. Silakan deploy ke GitHub Pages / Vercel.";
                 startModal.classList.add('hidden');
@@ -1477,14 +1494,12 @@
             initGame();
         });
 
-        // Render leaderboard saat load
         window.onload = () => {
             setupCanvasSize();
             renderLoop();
             renderLeaderboard('lb-list-start');
         };
 
-        // Cleanup saat tab ditutup
         window.addEventListener('beforeunload', () => {
             tts.cancel();
             stopTimer();
