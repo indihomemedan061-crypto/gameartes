@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Math Challenge v1.4 — Gestur Tangan</title>
+    <title>AR Math Challenge v1.5 — Gestur Tangan</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
     <style>
@@ -353,8 +353,9 @@
         }
 
         .btn-action:disabled {
-            opacity: 0.55;
+            opacity: 0.45;
             cursor: not-allowed;
+            filter: grayscale(0.5);
         }
 
         .btn-reset {
@@ -394,6 +395,11 @@
             margin-bottom: 6px;
         }
 
+        .form-label .required {
+            color: #ef4444;
+            margin-left: 2px;
+        }
+
         .form-select, .form-input {
             width: 100%;
             padding: 10px 14px;
@@ -409,6 +415,22 @@
         .form-select:focus, .form-input:focus {
             border-color: #fbbf24;
             box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.25);
+        }
+
+        .form-input.invalid {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+        }
+
+        .input-hint {
+            font-size: 0.72rem;
+            color: #ef4444;
+            margin-top: 4px;
+            display: none;
+        }
+
+        .input-hint.show {
+            display: block;
         }
 
         .hidden { display: none !important; }
@@ -520,14 +542,6 @@
         .lb-rank { color: #fbbf24; font-weight: 700; min-width: 22px; }
         .lb-name { flex: 1; margin: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .lb-score { color: #4ade80; font-weight: 700; }
-        .lb-range-tag {
-            font-size: 0.65rem;
-            color: #fbbf24;
-            background: rgba(251, 191, 36, 0.15);
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 4px;
-        }
 
         .lb-empty {
             font-size: 0.8rem;
@@ -648,8 +662,9 @@
                 </p>
 
                 <div class="form-group">
-                    <label class="form-label" for="player-name">Nama Pemain:</label>
-                    <input id="player-name" type="text" class="form-input" placeholder="cth: Budi" maxlength="16" value="Siswa">
+                    <label class="form-label" for="player-name">Nama Pemain: <span class="required">*</span></label>
+                    <input id="player-name" type="text" class="form-input" placeholder="Masukkan nama kamu (wajib)" maxlength="16" value="" autocomplete="off">
+                    <div id="name-hint" class="input-hint">Nama wajib diisi (minimal 2 karakter)</div>
                 </div>
 
                 <div class="form-group">
@@ -682,7 +697,7 @@
                     <div id="lb-list-start"></div>
                 </div>
 
-                <button id="start-btn" class="btn-action">
+                <button id="start-btn" class="btn-action" disabled>
                     <span>🚀 Mulai Permainan</span>
                 </button>
 
@@ -745,7 +760,7 @@
             CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
                 if (typeof r === 'number') r = [r, r, r, r];
                 if (w < 2 * r[0]) r[0] = w / 2;
-                if (h < 2 * r[0]) r[0] = h / 2;
+                if (h < 2 * r[0]) h[0] = h / 2;
                 this.beginPath();
                 this.moveTo(x + r[0], y);
                 this.arcTo(x + w, y, x + w, y + h, r[1]);
@@ -807,6 +822,12 @@
                 this._tone(440, now, 0.07, 'sine', 0.15);
                 this._tone(660, now + 0.05, 0.06, 'sine', 0.12);
             }
+            playDrop() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                this._tone(550, now, 0.08, 'sine', 0.18);
+                this._tone(880, now + 0.06, 0.1, 'sine', 0.15);
+            }
             playTimeout() {
                 if (!this.ctx) return;
                 const now = this.ctx.currentTime;
@@ -856,25 +877,32 @@
         const tts = new TTS();
 
         // ============================================================
-        // HELPER: Format angka (hilangkan trailing zero, pakai titik)
+        // HELPER: Format angka
         // ============================================================
         function formatNumber(n) {
             if (typeof n !== 'number' || isNaN(n)) return '0';
             if (Number.isInteger(n)) return String(n);
-            // Batasi 2 angka desimal, hilangkan trailing zero
             let s = n.toFixed(2);
             s = s.replace(/\.?0+$/, '');
             return s;
         }
 
-        // ============================================================
-        // SOAL GENERATOR (Random per topik × range)
-        // ============================================================
         function randInt(min, max) {
             return Math.floor(Math.random() * (max - min + 1)) + min;
         }
 
-        // Range helper
+        function shuffleArray(arr) {
+            const a = [...arr];
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        // ============================================================
+        // SOAL GENERATOR
+        // ============================================================
         function getRangeBounds(rangeStr) {
             if (rangeStr === '0-10') return [0, 10];
             if (rangeStr === '0-100') return [0, 100];
@@ -882,7 +910,6 @@
             return [0, 100];
         }
 
-        // Generate 3 opsi jawaban (1 benar, 2 salah) → string angka
         function generateOptions(correct) {
             const correctStr = formatNumber(correct);
             const options = new Set([correctStr]);
@@ -892,25 +919,21 @@
                 attempts++;
                 let delta;
                 if (Number.isInteger(correct)) {
-                    // Bulat: delta 1..10 atau proporsional
                     const magnitude = Math.max(1, Math.abs(correct));
                     delta = randInt(1, Math.max(2, Math.floor(magnitude * 0.1) + 2));
                     if (Math.random() < 0.5) delta = -delta;
                 } else {
-                    // Desimal: delta kelipatan 0.1 atau 0.5
                     delta = (Math.random() < 0.5 ? 0.5 : 0.25) * (Math.random() < 0.5 ? 1 : -1);
                 }
                 const wrong = correct + delta;
                 if (wrong < 0) continue;
                 if (!Number.isInteger(correct)) {
-                    // Wrong juga dibulatkan 2 desimal
                     options.add(formatNumber(parseFloat(wrong.toFixed(2))));
                 } else {
                     options.add(formatNumber(wrong));
                 }
             }
 
-            // Kalau masih kurang dari 3, tambah angka acak
             while (options.size < 3) {
                 const fallback = correct + randInt(1, 20);
                 options.add(formatNumber(fallback));
@@ -919,12 +942,10 @@
             return shuffleArray([...options]);
         }
 
-        // Generate 1 soal berdasarkan topik & range
         function generateQuestion(topic, rangeStr) {
             const [minV, maxV] = getRangeBounds(rangeStr);
             let a, b, question, answer;
 
-            // Topik Campuran → pilih operasi acak
             let actualTopic = topic;
             if (topic === 'Campuran') {
                 const ops = ['Penjumlahan', 'Pengurangan', 'Perkalian', 'Pembagian'];
@@ -942,13 +963,12 @@
                 case 'Pengurangan': {
                     a = randInt(minV, maxV);
                     b = randInt(minV, maxV);
-                    if (a < b) [a, b] = [b, a]; // swap agar hasil >= 0
+                    if (a < b) [a, b] = [b, a];
                     answer = a - b;
                     question = `${a} - ${b}`;
                     break;
                 }
                 case 'Perkalian': {
-                    // Untuk range 0-1000, batasi faktor biar tidak terlalu ekstrem
                     let maxFactor;
                     if (rangeStr === '0-10') maxFactor = 10;
                     else if (rangeStr === '0-100') maxFactor = 12;
@@ -961,23 +981,18 @@
                     break;
                 }
                 case 'Pembagian': {
-                    // Bagi: pastikan a habis dibagi b, atau hasil desimal 2 angka
                     const divisor = randInt(2, rangeStr === '0-10' ? 10 : (rangeStr === '0-100' ? 12 : 20));
                     const quotient = randInt(1, Math.max(2, Math.floor(maxV / divisor)));
 
-                    // 60% kasus: hasil bulat
                     if (Math.random() < 0.6) {
                         a = divisor * quotient;
                         b = divisor;
                         answer = quotient;
                     } else {
-                        // Kasus desimal: pilih a yang tidak habis dibagi
                         a = randInt(divisor + 1, Math.min(maxV, divisor * 20));
                         b = divisor;
                         answer = a / b;
-                        // Bulatkan 2 desimal
                         answer = parseFloat(answer.toFixed(2));
-                        // Pastikan masih wajar (bukan 0)
                         if (answer === 0) { a = divisor * 2; answer = 2; }
                     }
                     question = `${a} ÷ ${b}`;
@@ -995,7 +1010,6 @@
             return { question, options, answer: formatNumber(answer) };
         }
 
-        // Generate daftar soal untuk 1 game
         function generateGameQuestions(topic, rangeStr, count) {
             const questions = [];
             const seen = new Set();
@@ -1012,15 +1026,6 @@
             return questions;
         }
 
-        function shuffleArray(arr) {
-            const a = [...arr];
-            for (let i = a.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [a[i], a[j]] = [a[j], a[i]];
-            }
-            return a;
-        }
-
         // ============================================================
         // KONFIGURASI
         // ============================================================
@@ -1029,8 +1034,17 @@
         const MAX_SCORE = 100;
         const TIME_PER_QUESTION = 20;
 
+        // ⭐ v1.5: Hysteresis + Debounce config
+        const PINCH_GRAB_FACTOR = 0.05;      // ambang grab = 5% lebar layar (max 60)
+        const PINCH_RELEASE_FACTOR = 0.08;   // ambang release = 8% lebar layar (max 90)
+        const DEBOUNCE_FRAMES = 3;           // butuh 3 frame konsisten untuk ubah state
+        const AUTO_DROP_MS = 800;            // auto-drop setelah 800ms di drop zone
+
+        let pinchGrabThreshold = 50;
+        let pinchReleaseThreshold = 80;
+
         // ============================================================
-        // LEADERBOARD (per range)
+        // LEADERBOARD
         // ============================================================
         const LB_KEY = 'arMathLeaderboard_v2';
         const VALID_RANGES = ['0-10', '0-100', '0-1000'];
@@ -1039,9 +1053,7 @@
             try {
                 const raw = JSON.parse(localStorage.getItem(LB_KEY) || '{}');
                 const result = {};
-                VALID_RANGES.forEach(r => {
-                    result[r] = Array.isArray(raw[r]) ? raw[r] : [];
-                });
+                VALID_RANGES.forEach(r => { result[r] = Array.isArray(raw[r]) ? raw[r] : []; });
                 return result;
             } catch {
                 const empty = {};
@@ -1066,7 +1078,7 @@
             catch (e) { console.warn('LB save error', e); }
         }
 
-        let currentLbTab = '0-100'; // tab aktif di modal start
+        let currentLbTab = '0-100';
 
         function renderLeaderboard(containerId, rangeStr) {
             const container = document.getElementById(containerId);
@@ -1117,6 +1129,7 @@
         const feedbackBannerEl = document.getElementById('feedback-banner');
         const timerBarEl = document.getElementById('timer-bar');
         const playerNameInput = document.getElementById('player-name');
+        const nameHintEl = document.getElementById('name-hint');
         const topicSelect = document.getElementById('topic-select');
         const rangeSelect = document.getElementById('range-select');
         const handHintEl = document.getElementById('hand-hint');
@@ -1141,7 +1154,7 @@
         let isAnswerChecking = false;
         let selectedTopic = 'Penjumlahan';
         let selectedRange = '0-100';
-        let playerName = 'Siswa';
+        let playerName = '';
 
         let timeLeft = TIME_PER_QUESTION;
         let timerInterval = null;
@@ -1150,23 +1163,31 @@
         let answerCards = [];
         let dropZone = { x: 0, y: 0, width: 220, height: 160, isHovered: false };
 
+        // Hand tracking
         let handLandmarks = null;
         let isHandDetected = false;
         let isPinching = false;
         let pinchPos = { x: 0, y: 0 };
         let grabbedCard = null;
         let isProcessingFrame = false;
-        let pinchThreshold = 50;
+
+        // ⭐ v1.5: Debounce + Auto-drop state
+        let pinchStateBuffer = [];              // riwayat frame pinch boolean
+        let confirmedPinching = false;          // state pinch yang sudah dikonfirmasi
+        let grabFrameCount = 0;                 // counter debounce grab
+        let releaseFrameCount = 0;              // counter debounce release
+        let cardInZoneStartTime = 0;            // waktu kartu mulai hover di drop zone
+        let cardInZoneLastCheck = false;        // status hover terakhir
 
         // ============================================================
-        // PREFERENSI TERSIMPAN
+        // PREFERENSI
         // ============================================================
         const PREF_KEY = 'arMathPrefs_v1';
 
         function savePrefs() {
             try {
                 localStorage.setItem(PREF_KEY, JSON.stringify({
-                    name: playerNameInput.value,
+                    name: playerNameInput.value.trim(),
                     topic: topicSelect.value,
                     range: rangeSelect.value
                 }));
@@ -1176,13 +1197,41 @@
         function loadPrefs() {
             try {
                 const p = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
-                if (p.name) playerNameInput.value = p.name;
+                // ⭐ v1.5: Nama HANYA dimuat kalau ada & tidak kosong
+                if (p.name && p.name.trim().length >= 2) {
+                    playerNameInput.value = p.name.trim();
+                } else {
+                    playerNameInput.value = '';
+                }
                 if (p.topic) topicSelect.value = p.topic;
                 if (p.range && VALID_RANGES.includes(p.range)) {
                     rangeSelect.value = p.range;
                     currentLbTab = p.range;
                 }
             } catch (e) {}
+            validateName();
+        }
+
+        // ⭐ v1.5: Validasi nama realtime
+        function validateName() {
+            const name = playerNameInput.value.trim();
+            const isValid = name.length >= 2;
+
+            if (isValid) {
+                playerNameInput.classList.remove('invalid');
+                nameHintEl.classList.remove('show');
+                startBtn.disabled = false;
+            } else {
+                playerNameInput.classList.add('invalid');
+                if (name.length > 0) {
+                    nameHintEl.textContent = 'Nama minimal 2 karakter';
+                    nameHintEl.classList.add('show');
+                } else {
+                    nameHintEl.classList.remove('show');
+                }
+                startBtn.disabled = true;
+            }
+            return isValid;
         }
 
         // ============================================================
@@ -1204,7 +1253,9 @@
             dropZone.x = (W - dropZone.width) / 2;
             dropZone.y = H * 0.62;
 
-            pinchThreshold = Math.max(35, Math.min(60, W * 0.05));
+            // ⭐ v1.5: Hysteresis threshold
+            pinchGrabThreshold = Math.max(40, Math.min(60, W * PINCH_GRAB_FACTOR));
+            pinchReleaseThreshold = Math.max(70, Math.min(90, W * PINCH_RELEASE_FACTOR));
 
             repositionCards();
         }
@@ -1213,7 +1264,7 @@
         window.addEventListener('orientationchange', () => setTimeout(setupCanvasSize, 200));
 
         // ============================================================
-        // CARD CLASS — Font & lebar dinamis
+        // CARD CLASS
         // ============================================================
         class Card {
             constructor(text, slotIndex) {
@@ -1223,11 +1274,9 @@
                 const W = window.innerWidth;
                 const H = window.innerHeight;
 
-                // Base size
                 this.baseWidth = Math.min(150, W * 0.22);
                 this.baseHeight = Math.min(100, H * 0.13);
 
-                // Auto-shrink: kalau 3 kartu + gap > 90% W, perkecil
                 const gap = Math.min(20, W * 0.025);
                 const maxAvailable = W * 0.92;
                 const needed = 3 * this.baseWidth + 2 * gap;
@@ -1247,10 +1296,10 @@
 
             getFontScale() {
                 const len = this.text.length;
-                if (len <= 2) return 0.5;      // 100%
-                if (len <= 4) return 0.4;      // 80%
-                if (len <= 6) return 0.325;    // 65%
-                return 0.25;                    // 50%
+                if (len <= 2) return 0.5;
+                if (len <= 4) return 0.4;
+                if (len <= 6) return 0.325;
+                return 0.25;
             }
 
             calcHomePosition() {
@@ -1301,7 +1350,6 @@
                 context.strokeStyle = this.isGrabbed ? '#fbbf24' : 'rgba(255, 255, 255, 0.6)';
                 context.stroke();
 
-                // Font dinamis
                 const fontSize = Math.round(h * this.getFontScale());
                 context.fillStyle = '#0f172a';
                 context.font = 'bold ' + fontSize + 'px system-ui, sans-serif';
@@ -1312,8 +1360,9 @@
                 context.restore();
             }
 
+            // ⭐ v1.5: Perbesar padding grab dari 20 → 40
             containsPoint(px, py) {
-                const pad = 20;
+                const pad = 40;
                 return (
                     px >= this.x - pad &&
                     px <= this.x + this.width + pad &&
@@ -1410,7 +1459,7 @@
 
             selectedTopic = topicSelect.value;
             selectedRange = rangeSelect.value;
-            playerName = (playerNameInput.value || 'Siswa').trim().slice(0, 16) || 'Siswa';
+            playerName = (playerNameInput.value || '').trim().slice(0, 16);
 
             rangeTagTopEl.textContent = `Range ${selectedRange}`;
             savePrefs();
@@ -1421,6 +1470,13 @@
 
         function loadQuestion() {
             isAnswerChecking = false;
+            // ⭐ v1.5: Reset state pinch saat ganti soal
+            grabbedCard = null;
+            confirmedPinching = false;
+            pinchStateBuffer = [];
+            cardInZoneStartTime = 0;
+            cardInZoneLastCheck = false;
+
             if (currentQuestionIndex >= questionsList.length) {
                 finishGame();
                 return;
@@ -1430,7 +1486,6 @@
             questionTextEl.textContent = q.question + " = ?";
             updateProgressText();
 
-            // Opsi sudah diacak di generator
             answerCards = q.options.map((option, idx) => new Card(option, idx));
 
             tts.speak(`Berapa ${q.question}?`);
@@ -1576,13 +1631,13 @@
             context.beginPath();
             context.moveTo(thumbPt.x, thumbPt.y);
             context.lineTo(indexPt.x, indexPt.y);
-            context.lineWidth = isPinching ? 5 : 2;
-            context.strokeStyle = isPinching ? '#4ade80' : '#fbbf24';
+            context.lineWidth = confirmedPinching ? 5 : 2;
+            context.strokeStyle = confirmedPinching ? '#4ade80' : '#fbbf24';
             context.stroke();
 
             context.beginPath();
-            context.arc(pinchPos.x, pinchPos.y, isPinching ? 12 : 8, 0, Math.PI * 2);
-            context.fillStyle = isPinching ? '#4ade80' : 'rgba(251, 191, 36, 0.75)';
+            context.arc(pinchPos.x, pinchPos.y, confirmedPinching ? 12 : 8, 0, Math.PI * 2);
+            context.fillStyle = confirmedPinching ? '#4ade80' : 'rgba(251, 191, 36, 0.75)';
             context.fill();
             context.lineWidth = 2;
             context.strokeStyle = '#ffffff';
@@ -1610,11 +1665,66 @@
                     card.update();
                     card.draw(ctx);
                 });
+
+                // ⭐ v1.5: Auto-drop check
+                checkAutoDrop();
             }
 
             drawHandFeedback(ctx);
 
             requestAnimationFrame(renderLoop);
+        }
+
+        // ⭐ v1.5: Auto-drop saat kartu diam di drop zone
+        function checkAutoDrop() {
+            if (!grabbedCard || isAnswerChecking) {
+                cardInZoneStartTime = 0;
+                cardInZoneLastCheck = false;
+                return;
+            }
+
+            const cardCenterX = grabbedCard.x + grabbedCard.width / 2;
+            const cardCenterY = grabbedCard.y + grabbedCard.height / 2;
+
+            const inZone = (
+                cardCenterX >= dropZone.x &&
+                cardCenterX <= dropZone.x + dropZone.width &&
+                cardCenterY >= dropZone.y &&
+                cardCenterY <= dropZone.y + dropZone.height
+            );
+
+            if (inZone) {
+                if (!cardInZoneLastCheck) {
+                    cardInZoneStartTime = Date.now();
+                }
+                cardInZoneLastCheck = true;
+
+                const elapsed = Date.now() - cardInZoneStartTime;
+                if (elapsed >= AUTO_DROP_MS) {
+                    // Auto-drop!
+                    sfx.playDrop();
+                    forceDropCard();
+                }
+            } else {
+                cardInZoneStartTime = 0;
+                cardInZoneLastCheck = false;
+            }
+        }
+
+        function forceDropCard() {
+            if (!grabbedCard) return;
+            grabbedCard.isGrabbed = false;
+            const cardToCheck = grabbedCard;
+            grabbedCard = null;
+            dropZone.isHovered = false;
+            confirmedPinching = false;
+            pinchStateBuffer = [];
+            grabFrameCount = 0;
+            releaseFrameCount = 0;
+
+            if (!isAnswerChecking) {
+                checkAnswer(cardToCheck);
+            }
         }
 
         // ============================================================
@@ -1636,33 +1746,66 @@
                     updateTimerBar();
                 }
 
-                const thumbLM = handLandmarks[4];
-                const indexLM = handLandmarks[8];
-
-                const thumbPt = getCanvasPt(thumbLM);
-                const indexPt = getCanvasPt(indexLM);
+                const thumbPt = getCanvasPt(handLandmarks[4]);
+                const indexPt = getCanvasPt(handLandmarks[8]);
 
                 pinchPos = {
                     x: (thumbPt.x + indexPt.x) / 2,
                     y: (thumbPt.y + indexPt.y) / 2
                 };
 
-                const pixelDistance = Math.hypot(thumbPt.x - indexPt.x, thumbPt.y - indexPt.y);
+                const dist = Math.hypot(thumbPt.x - indexPt.x, thumbPt.y - indexPt.y);
 
-                const wasPinching = isPinching;
-                isPinching = pixelDistance < pinchThreshold;
+                // ⭐ v1.5: Hysteresis
+                let rawPinch;
+                if (confirmedPinching) {
+                    // Kalau sudah pinch, tetap pinch sampai dist > releaseThreshold
+                    rawPinch = dist < pinchReleaseThreshold;
+                } else {
+                    // Kalau belum pinch, baru pinch kalau dist < grabThreshold
+                    rawPinch = dist < pinchGrabThreshold;
+                }
 
-                handleGestureInteraction(wasPinching, isPinching);
+                // ⭐ v1.5: Debounce
+                pinchStateBuffer.push(rawPinch);
+                if (pinchStateBuffer.length > DEBOUNCE_FRAMES) {
+                    pinchStateBuffer.shift();
+                }
+
+                let stablePinch = confirmedPinching;
+                if (pinchStateBuffer.length >= DEBOUNCE_FRAMES) {
+                    const allTrue = pinchStateBuffer.every(v => v === true);
+                    const allFalse = pinchStateBuffer.every(v => v === false);
+
+                    if (!confirmedPinching && allTrue) {
+                        // Semua frame terakhir = pinch → konfirmasi pinch ON
+                        stablePinch = true;
+                    } else if (confirmedPinching && allFalse) {
+                        // Semua frame terakhir = tidak pinch → konfirmasi pinch OFF
+                        stablePinch = false;
+                    }
+                }
+
+                // Handle transisi state
+                const wasPinching = confirmedPinching;
+                confirmedPinching = stablePinch;
+                isPinching = confirmedPinching;
+
+                handleGestureInteraction(wasPinching, confirmedPinching);
 
             } else {
                 if (isHandDetected && grabbedCard) {
                     showFeedback("Tangan hilang!", "warning");
-                    releaseCard();
+                    releaseCard(true);
                 }
 
                 isHandDetected = false;
                 handLandmarks = null;
                 isPinching = false;
+                confirmedPinching = false;
+                pinchStateBuffer = [];
+                grabFrameCount = 0;
+                releaseFrameCount = 0;
 
                 if (!isAnswerChecking) {
                     isTimerPaused = true;
@@ -1678,17 +1821,21 @@
         function handleGestureInteraction(wasPinching, currentlyPinching) {
             if (isAnswerChecking) return;
 
+            // Transisi OFF → ON: coba grab kartu
             if (!wasPinching && currentlyPinching) {
                 for (let card of answerCards) {
                     if (card.containsPoint(pinchPos.x, pinchPos.y)) {
                         grabbedCard = card;
                         card.isGrabbed = true;
                         sfx.playPick();
+                        cardInZoneStartTime = 0;
+                        cardInZoneLastCheck = false;
                         break;
                     }
                 }
             }
 
+            // Update hover dropzone
             if (grabbedCard) {
                 const cardCenterX = grabbedCard.x + grabbedCard.width / 2;
                 const cardCenterY = grabbedCard.y + grabbedCard.height / 2;
@@ -1703,12 +1850,13 @@
                 dropZone.isHovered = false;
             }
 
+            // Transisi ON → OFF: release kartu
             if (wasPinching && !currentlyPinching && grabbedCard) {
-                releaseCard();
+                releaseCard(false);
             }
         }
 
-        function releaseCard() {
+        function releaseCard(forceReset) {
             if (!grabbedCard) return;
 
             const cardCenterX = grabbedCard.x + grabbedCard.width / 2;
@@ -1725,8 +1873,11 @@
             const cardToCheck = grabbedCard;
             grabbedCard = null;
             dropZone.isHovered = false;
+            cardInZoneStartTime = 0;
+            cardInZoneLastCheck = false;
 
             if (droppedInZone && !isAnswerChecking) {
+                sfx.playDrop();
                 checkAnswer(cardToCheck);
             }
         }
@@ -1803,6 +1954,12 @@
         // EVENT LISTENERS
         // ============================================================
         startBtn.addEventListener('click', () => {
+            // ⭐ v1.5: Validasi nama sekali lagi
+            if (!validateName()) {
+                playerNameInput.focus();
+                return;
+            }
+
             sfx.init();
 
             if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
@@ -1826,7 +1983,14 @@
             loadingIndicator.classList.add('hidden');
             startBtn.querySelector('span').textContent = '🚀 Mulai Permainan';
 
-            playerNameInput.focus();
+            // ⭐ v1.5: Reset nama biar bisa diisi baru
+            playerNameInput.value = '';
+            validateName();
+
+            setTimeout(() => {
+                playerNameInput.focus();
+            }, 100);
+
             refreshLbTabs();
             renderLeaderboard('lb-list-start', currentLbTab);
         });
@@ -1840,7 +2004,6 @@
             }
         });
 
-        // Tab leaderboard
         document.querySelectorAll('#leaderboard-start .lb-tab').forEach(tab => {
             tab.addEventListener('click', () => {
                 currentLbTab = tab.dataset.range;
@@ -1849,12 +2012,15 @@
             });
         });
 
-        // Saat range dropdown berubah → sync tab
         rangeSelect.addEventListener('change', () => {
             currentLbTab = rangeSelect.value;
             refreshLbTabs();
             renderLeaderboard('lb-list-start', currentLbTab);
         });
+
+        // ⭐ v1.5: Validasi nama realtime
+        playerNameInput.addEventListener('input', validateName);
+        playerNameInput.addEventListener('blur', validateName);
 
         window.onload = () => {
             setupCanvasSize();
@@ -1862,6 +2028,8 @@
             loadPrefs();
             refreshLbTabs();
             renderLeaderboard('lb-list-start', currentLbTab);
+            // Auto-focus ke input nama
+            setTimeout(() => playerNameInput.focus(), 200);
         };
 
         window.addEventListener('beforeunload', () => {
