@@ -603,6 +603,23 @@
 </head>
 <body>
 
+    <!-- ============================================================ -->
+    <!-- GERBANG LOGIN — blok ini menutupi seluruh halaman            -->
+    <!-- kalau user belum login atau sesi sudah habis                 -->
+    <!-- ============================================================ -->
+    <div id="auth-gate" style="
+        position: fixed; inset: 0; z-index: 9999;
+        background: #090d16; color: #fff;
+        display: flex; justify-content: center; align-items: center;
+        font-family: system-ui, sans-serif; text-align: center; padding: 20px;
+    ">
+      <div>
+        <div style="font-size: 3rem; margin-bottom: 12px;">🔒</div>
+        <h2 style="font-size: 1.4rem; margin-bottom: 8px;">Memeriksa akses...</h2>
+        <p id="auth-msg" style="color: #94a3b8; font-size: 0.9rem;">Mohon tunggu sebentar</p>
+      </div>
+    </div>
+
     <div id="app-container">
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="game-canvas"></canvas>
@@ -751,6 +768,70 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // ============================================================
+        // GERBANG LOGIN — cek sesi sebelum game dimuat
+        // ============================================================
+        (function checkAuthGate() {
+            const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbxTS-aG8N1y0GDE45cOjoh4Y2KRMnxdMGt3uln5DEZQ20CMCZA_dUlD75lyEhnau1g8hw/exec';
+
+            const token = localStorage.getItem('session_token');
+            const nama = localStorage.getItem('nama');
+            const expiresAt = localStorage.getItem('expires_at');
+            const gate = document.getElementById('auth-gate');
+            const msg = document.getElementById('auth-msg');
+
+            // Kalau tidak ada token, langsung redirect ke login
+            if (!token) {
+                msg.textContent = 'Anda belum login. Mengalihkan...';
+                setTimeout(() => window.location.href = 'login.html', 600);
+                return;
+            }
+
+            // Cek masa berlaku
+            if (expiresAt) {
+                const expDate = new Date(expiresAt + 'T23:59:59');
+                if (new Date() > expDate) {
+                    msg.textContent = 'Akses sudah kedaluwarsa. Mengalihkan...';
+                    localStorage.removeItem('session_token');
+                    setTimeout(() => window.location.href = 'login.html', 1200);
+                    return;
+                }
+            }
+
+            // Verifikasi token ke backend
+            fetch(BACKEND_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: 'verifySession',
+                    session_token: token
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.allowed) {
+                    // ✅ Lolos — sembunyikan gerbang, tampilkan game
+                    gate.style.display = 'none';
+                    console.log('✅ Akses diberikan untuk:', data.nama);
+
+                    const style = 'background: #fbbf24; color: #0f172a; padding: 4px 10px; border-radius: 6px; font-weight: 800;';
+                    console.log('%c👤 ' + data.nama, style);
+                } else {
+                    // ❌ Gagal — redirect ke login
+                    msg.textContent = data.reason || 'Akses ditolak';
+                    localStorage.removeItem('session_token');
+                    setTimeout(() => window.location.href = 'login.html', 1500);
+                }
+            })
+            .catch(err => {
+                console.error('Auth error:', err);
+                msg.textContent = 'Gagal verifikasi sesi: ' + err.message;
+                setTimeout(() => window.location.href = 'login.html', 2000);
+            });
+        })();
+    </script>
 
     <script>
         // ============================================================
@@ -1034,11 +1115,10 @@
         const MAX_SCORE = 100;
         const TIME_PER_QUESTION = 20;
 
-        // ⭐ v1.5: Hysteresis + Debounce config
-        const PINCH_GRAB_FACTOR = 0.05;      // ambang grab = 5% lebar layar (max 60)
-        const PINCH_RELEASE_FACTOR = 0.08;   // ambang release = 8% lebar layar (max 90)
-        const DEBOUNCE_FRAMES = 3;           // butuh 3 frame konsisten untuk ubah state
-        const AUTO_DROP_MS = 800;            // auto-drop setelah 800ms di drop zone
+        const PINCH_GRAB_FACTOR = 0.05;
+        const PINCH_RELEASE_FACTOR = 0.08;
+        const DEBOUNCE_FRAMES = 3;
+        const AUTO_DROP_MS = 800;
 
         let pinchGrabThreshold = 50;
         let pinchReleaseThreshold = 80;
@@ -1163,7 +1243,6 @@
         let answerCards = [];
         let dropZone = { x: 0, y: 0, width: 220, height: 160, isHovered: false };
 
-        // Hand tracking
         let handLandmarks = null;
         let isHandDetected = false;
         let isPinching = false;
@@ -1171,13 +1250,12 @@
         let grabbedCard = null;
         let isProcessingFrame = false;
 
-        // ⭐ v1.5: Debounce + Auto-drop state
-        let pinchStateBuffer = [];              // riwayat frame pinch boolean
-        let confirmedPinching = false;          // state pinch yang sudah dikonfirmasi
-        let grabFrameCount = 0;                 // counter debounce grab
-        let releaseFrameCount = 0;              // counter debounce release
-        let cardInZoneStartTime = 0;            // waktu kartu mulai hover di drop zone
-        let cardInZoneLastCheck = false;        // status hover terakhir
+        let pinchStateBuffer = [];
+        let confirmedPinching = false;
+        let grabFrameCount = 0;
+        let releaseFrameCount = 0;
+        let cardInZoneStartTime = 0;
+        let cardInZoneLastCheck = false;
 
         // ============================================================
         // PREFERENSI
@@ -1197,7 +1275,6 @@
         function loadPrefs() {
             try {
                 const p = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
-                // ⭐ v1.5: Nama HANYA dimuat kalau ada & tidak kosong
                 if (p.name && p.name.trim().length >= 2) {
                     playerNameInput.value = p.name.trim();
                 } else {
@@ -1212,7 +1289,6 @@
             validateName();
         }
 
-        // ⭐ v1.5: Validasi nama realtime
         function validateName() {
             const name = playerNameInput.value.trim();
             const isValid = name.length >= 2;
@@ -1253,7 +1329,6 @@
             dropZone.x = (W - dropZone.width) / 2;
             dropZone.y = H * 0.62;
 
-            // ⭐ v1.5: Hysteresis threshold
             pinchGrabThreshold = Math.max(40, Math.min(60, W * PINCH_GRAB_FACTOR));
             pinchReleaseThreshold = Math.max(70, Math.min(90, W * PINCH_RELEASE_FACTOR));
 
@@ -1360,7 +1435,6 @@
                 context.restore();
             }
 
-            // ⭐ v1.5: Perbesar padding grab dari 20 → 40
             containsPoint(px, py) {
                 const pad = 40;
                 return (
@@ -1470,7 +1544,6 @@
 
         function loadQuestion() {
             isAnswerChecking = false;
-            // ⭐ v1.5: Reset state pinch saat ganti soal
             grabbedCard = null;
             confirmedPinching = false;
             pinchStateBuffer = [];
@@ -1666,7 +1739,6 @@
                     card.draw(ctx);
                 });
 
-                // ⭐ v1.5: Auto-drop check
                 checkAutoDrop();
             }
 
@@ -1675,7 +1747,6 @@
             requestAnimationFrame(renderLoop);
         }
 
-        // ⭐ v1.5: Auto-drop saat kartu diam di drop zone
         function checkAutoDrop() {
             if (!grabbedCard || isAnswerChecking) {
                 cardInZoneStartTime = 0;
@@ -1701,7 +1772,6 @@
 
                 const elapsed = Date.now() - cardInZoneStartTime;
                 if (elapsed >= AUTO_DROP_MS) {
-                    // Auto-drop!
                     sfx.playDrop();
                     forceDropCard();
                 }
@@ -1756,17 +1826,13 @@
 
                 const dist = Math.hypot(thumbPt.x - indexPt.x, thumbPt.y - indexPt.y);
 
-                // ⭐ v1.5: Hysteresis
                 let rawPinch;
                 if (confirmedPinching) {
-                    // Kalau sudah pinch, tetap pinch sampai dist > releaseThreshold
                     rawPinch = dist < pinchReleaseThreshold;
                 } else {
-                    // Kalau belum pinch, baru pinch kalau dist < grabThreshold
                     rawPinch = dist < pinchGrabThreshold;
                 }
 
-                // ⭐ v1.5: Debounce
                 pinchStateBuffer.push(rawPinch);
                 if (pinchStateBuffer.length > DEBOUNCE_FRAMES) {
                     pinchStateBuffer.shift();
@@ -1778,15 +1844,12 @@
                     const allFalse = pinchStateBuffer.every(v => v === false);
 
                     if (!confirmedPinching && allTrue) {
-                        // Semua frame terakhir = pinch → konfirmasi pinch ON
                         stablePinch = true;
                     } else if (confirmedPinching && allFalse) {
-                        // Semua frame terakhir = tidak pinch → konfirmasi pinch OFF
                         stablePinch = false;
                     }
                 }
 
-                // Handle transisi state
                 const wasPinching = confirmedPinching;
                 confirmedPinching = stablePinch;
                 isPinching = confirmedPinching;
@@ -1821,7 +1884,6 @@
         function handleGestureInteraction(wasPinching, currentlyPinching) {
             if (isAnswerChecking) return;
 
-            // Transisi OFF → ON: coba grab kartu
             if (!wasPinching && currentlyPinching) {
                 for (let card of answerCards) {
                     if (card.containsPoint(pinchPos.x, pinchPos.y)) {
@@ -1835,7 +1897,6 @@
                 }
             }
 
-            // Update hover dropzone
             if (grabbedCard) {
                 const cardCenterX = grabbedCard.x + grabbedCard.width / 2;
                 const cardCenterY = grabbedCard.y + grabbedCard.height / 2;
@@ -1850,7 +1911,6 @@
                 dropZone.isHovered = false;
             }
 
-            // Transisi ON → OFF: release kartu
             if (wasPinching && !currentlyPinching && grabbedCard) {
                 releaseCard(false);
             }
@@ -1954,7 +2014,6 @@
         // EVENT LISTENERS
         // ============================================================
         startBtn.addEventListener('click', () => {
-            // ⭐ v1.5: Validasi nama sekali lagi
             if (!validateName()) {
                 playerNameInput.focus();
                 return;
@@ -1983,7 +2042,6 @@
             loadingIndicator.classList.add('hidden');
             startBtn.querySelector('span').textContent = '🚀 Mulai Permainan';
 
-            // ⭐ v1.5: Reset nama biar bisa diisi baru
             playerNameInput.value = '';
             validateName();
 
@@ -2018,7 +2076,6 @@
             renderLeaderboard('lb-list-start', currentLbTab);
         });
 
-        // ⭐ v1.5: Validasi nama realtime
         playerNameInput.addEventListener('input', validateName);
         playerNameInput.addEventListener('blur', validateName);
 
@@ -2028,7 +2085,6 @@
             loadPrefs();
             refreshLbTabs();
             renderLeaderboard('lb-list-start', currentLbTab);
-            // Auto-focus ke input nama
             setTimeout(() => playerNameInput.focus(), 200);
         };
 
