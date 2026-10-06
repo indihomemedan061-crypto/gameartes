@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — AR Math Challenge</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #090d16;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .card {
+      background: rgba(30, 41, 59, 0.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      padding: 36px 28px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+    .emoji {
+      font-size: 3.5rem;
+      line-height: 1;
+      margin-bottom: 12px;
+      animation: float 3s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: 0.9rem;
+      color: #cbd5e1;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .g_id_signin {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    #status {
+      font-size: 0.88rem;
+      color: #94a3b8;
+      min-height: 24px;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    #status.error { color: #f87171; }
+    #status.success { color: #4ade80; }
+    #status.loading { color: #fbbf24; }
+    .info-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 0.82rem;
+      color: #cbd5e1;
+      line-height: 1.6;
+      text-align: left;
+      margin-top: 20px;
+    }
+    .info-box strong { color: #fbbf24; }
+    .logout-btn {
+      display: none;
+      margin-top: 16px;
+      background: transparent;
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #f87171;
+      padding: 8px 18px;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .logout-btn:hover { background: rgba(239, 68, 68, 0.15); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="emoji">🖐️🔢</div>
+    <h1>Login Siswa</h1>
+    <p class="subtitle">
+      Masuk dengan akun Google yang <strong>sudah terdaftar</strong> dan <strong>aktif</strong>
+      untuk mengakses AR Math Challenge.
+    </p>
+
+    <!-- Google Sign-In button -->
+    <div id="g_id_onload"
+         data-client_id="719903283357-d3id3d3u52neo2be91vcbkjo5icvagfc.apps.googleusercontent.com"
+         data-callback="handleCredentialResponse"
+         data-auto_prompt="false">
+    </div>
+    <div class="g_id_signin"
+         data-type="standard"
+         data-size="large"
+         data-theme="filled_black"
+         data-text="signin_with"
+         data-shape="pill"
+         data-logo_alignment="left">
+    </div>
+
+    <div id="status">Silakan login untuk melanjutkan</div>
+    <button id="logout-btn" class="logout-btn" onclick="doLogout()">Logout</button>
+
+    <div class="info-box">
+      <strong>Belum terdaftar?</strong><br>
+      Hubungi admin untuk melakukan pembayaran dan mendaftarkan email Google kamu ke sistem.
+    </div>
+  </div>
+
+  <script>
+    // ============================================================
+    // KONFIGURASI BACKEND
+    // ============================================================
+    const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbxTS-aG8N1y0GDE45cOjoh4Y2KRMnxdMGt3uln5DEZQ20CMCZA_dUlD75lyEhnau1g8hw/exec';
+
+    const statusEl = document.getElementById('status');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    function setStatus(text, type) {
+      statusEl.textContent = text;
+      statusEl.className = type || '';
+    }
+
+    // ============================================================
+    // CALLBACK SETELAH GOOGLE VERIFIKASI
+    // ============================================================
+    async function handleCredentialResponse(response) {
+      setStatus('Memverifikasi akun...', 'loading');
+
+      try {
+        const res = await fetch(BACKEND_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'verifyLogin',
+            credential: response.credential
+          })
+        });
+
+        const data = await res.json();
+
+        if (data.allowed) {
+          // Simpan sesi
+          localStorage.setItem('session_token', data.session_token);
+          localStorage.setItem('nama', data.nama);
+          localStorage.setItem('email', data.email);
+          localStorage.setItem('expires_at', data.expires_at);
+
+          setStatus('✅ Berhasil! Selamat datang, ' + data.nama, 'success');
+
+          // Redirect ke game
+          setTimeout(() => {
+            window.location.href = 'index.html';
+          }, 1000);
+        } else {
+          setStatus('❌ ' + data.reason, 'error');
+        }
+      } catch (err) {
+        console.error('Login error:', err);
+        setStatus('❌ Gagal terhubung ke server: ' + err.message, 'error');
+      }
+    }
+
+    // ============================================================
+    // LOGOUT
+    // ============================================================
+    function doLogout() {
+      localStorage.removeItem('session_token');
+      localStorage.removeItem('nama');
+      localStorage.removeItem('email');
+      localStorage.removeItem('expires_at');
+      location.reload();
+    }
+
+    // ============================================================
+    // CEK SESI SAAT HALAMAN DIBUKA
+    // ============================================================
+    window.addEventListener('load', () => {
+      const token = localStorage.getItem('session_token');
+      const nama = localStorage.getItem('nama');
+
+      if (token && nama) {
+        setStatus('Anda sudah login sebagai ' + nama + '. Mengalihkan...', 'loading');
+        logoutBtn.style.display = 'inline-block';
+
+        // Verifikasi token ke backend dulu (kalau expired, jangan redirect)
+        fetch(BACKEND_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'verifySession',
+            session_token: token
+          })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.allowed) {
+            setTimeout(() => window.location.href = 'index.html', 800);
+          } else {
+            // Token kadaluarsa, bersihkan
+            localStorage.removeItem('session_token');
+            localStorage.removeItem('nama');
+            localStorage.removeItem('email');
+            localStorage.removeItem('expires_at');
+            setStatus('Sesi berakhir. Silakan login ulang.', 'error');
+            logoutBtn.style.display = 'none';
+          }
+        })
+        .catch(() => {
+          // Kalau gagal fetch, tetap biarkan user coba login manual
+          setStatus('Silakan login untuk melanjutkan', '');
+        });
+      }
+    });
+  </script>
+</body>
+</html>
